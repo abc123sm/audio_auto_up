@@ -11,6 +11,7 @@ BASE_DIR = Path(r'') # 填写你的主目录路径，例如：r'c:\code\audio_au
 # ==========================================
 SEVEN_ZIP_PATH = r"" # 填写7z路径，例如： SEVEN_ZIP_PATH = r"C:\Program Files\7-Zip-Zstandard\7z.exe"
 PCS_PATH = str(BASE_DIR / 'BaiduPCS-Go.exe')
+STEGO_TOOLS_DIR = str(BASE_DIR / 'tools')
 
 # ==========================================
 # 个人账号与网盘配置

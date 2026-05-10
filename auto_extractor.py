@@ -207,12 +207,41 @@ class AutoExtractor:
                 except Exception:
                     pass
 
-    def extract_recursive(self, target_dir: Path, passwords: list) -> Path:
+    def extract_with_stego(self, file_path: Path, passwords: list) -> bool:
+        try:
+            import stego_extractor
+        except ImportError:
+            print("stego_extractor module not found, skipping stego extraction.")
+            return False
+
+        extractor = stego_extractor.StegoExtractor(tools_dir=config.STEGO_TOOLS_DIR)
+        
+        filename_pwds = self._extract_passwords_from_filename(file_path.stem)
+        if hasattr(file_path, 'parent') and file_path.parent:
+            filename_pwds += self._extract_passwords_from_filename(file_path.parent.name)
+            
+        combined_passwords = passwords + filename_pwds
+        
+        print(f"Attempting to reveal stego from {file_path.name}...")
+        return extractor.reveal(str(file_path), combined_passwords)
+
+    def extract_recursive(self, target_dir: Path, passwords: list, is_top_level: bool = True) -> Path:
         if not target_dir.exists() or not target_dir.is_dir():
             return None
             
         print(f"\nScanning for archives in: {target_dir}")
         self.fix_missing_extensions(target_dir)
+        
+        if is_top_level:
+            stego_candidates = []
+            for file_path in target_dir.rglob('*'):
+                if file_path.is_file() and file_path.suffix.lower() in ['.mp4', '.mkv', '.webm', '.m4v', '.mov']:
+                    stego_candidates.append(file_path)
+            
+            for stego_file in stego_candidates:
+                if self.extract_with_stego(stego_file, passwords):
+                    print(f"Successfully revealed stego file: {stego_file.name}. Restarting scan.")
+                    return self.extract_recursive(target_dir, passwords, is_top_level=True)
         
         archives = []
         for file_path in target_dir.rglob('*'):
@@ -235,7 +264,7 @@ class AutoExtractor:
                 print(f"Extracted file count: {file_count}")
                 if file_count <= 5 and file_count > 0:
                     print(f"File count <= 5, checking for nested archives in {dest_dir}")
-                    child_final = self.extract_recursive(dest_dir, passwords)
+                    child_final = self.extract_recursive(dest_dir, passwords, is_top_level=False)
                     if child_final:
                         return child_final
                 return final_node
@@ -248,7 +277,7 @@ class AutoExtractor:
                     
                     file_count = self._count_extracted_files(d)
                     if file_count <= 5 and file_count > 0:
-                        self.extract_recursive(d, passwords)
+                        self.extract_recursive(d, passwords, is_top_level=False)
             return None
             
         return None

@@ -337,9 +337,6 @@ class SouthPlusCrawler:
         clean_text = html.unescape(clean_text)
         clean_text = clean_text.replace('\u00a0', ' ').replace('\u3000', ' ')
         search_text = clean_text
-        
-        with open("debug_clean_text.txt", "w", encoding="utf-8") as f:
-            f.write(clean_text)
             
         # 组装完整的购买框文本
         purchase_text = "\n".join(purchase_text_parts)
