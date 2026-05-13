@@ -17,8 +17,8 @@ class AutoExtractor:
             with file_path.open('rb') as f:
                 header = f.read(8)
             
-            # ZIP
-            if header.startswith(b'\x50\x4B\x03\x04'):
+            # ZIP (Standard, Central Directory, End of Central Dir, Spanned/Split)
+            if header.startswith((b'\x50\x4B\x03\x04', b'\x50\x4B\x01\x02', b'\x50\x4B\x05\x06', b'\x50\x4B\x07\x08')):
                 return '.zip'
             # RAR / RAR5
             if header.startswith(b'\x52\x61\x72\x21\x1A\x07'):
@@ -33,6 +33,8 @@ class AutoExtractor:
         return None
 
     def is_archive(self, file_path: Path) -> bool:
+        if file_path.suffix.lower() in ['.zip', '.rar', '.7z']:
+            return True
         return self.get_archive_type_from_magic(file_path) is not None
 
     def fix_missing_extensions(self, directory: Path):

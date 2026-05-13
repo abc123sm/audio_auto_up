@@ -364,7 +364,7 @@ class SouthPlusCrawler:
         baidu_links = []
         link_items = []
         # 使用 finditer 获取链接及其在文本中的位置
-        link_pattern = r'https?://pan\.baidu\.com/s/([a-zA-Z0-9\-_]+)(?:\?pwd=([a-zA-Z0-9]{4}))?'
+        link_pattern = r'(?:https?://)?pan\.baidu\.com/s/([a-zA-Z0-9\-_]+)(?:\?pwd=([a-zA-Z0-9]{4}))?'
         matches = list(re.finditer(link_pattern, clean_text))
         lines = clean_text.split('\n')
         code_pattern = r'(?:提取码|提取碼|提取|提码)[:：\s]*([a-zA-Z0-9]{4})'
@@ -449,7 +449,7 @@ class SouthPlusCrawler:
                             if cand_pwd not in link:
                                 pwd = cand_pwd
                 
-                final_link = link
+                final_link = link if link.startswith('http') else 'https://' + link
                 
                 is_proof = False
                 if link_line_index is not None:
@@ -574,7 +574,7 @@ class SouthPlusCrawler:
                         if cand_pwd not in link:
                             pwd = cand_pwd
             
-            final_link = link
+            final_link = link if link.startswith('http') else 'https://' + link
             
             # 优化 is_proof 判定：仅检查链接所在行或紧邻的前一行
             is_proof = False
