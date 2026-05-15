@@ -50,14 +50,31 @@ class AutoExtractor:
                         file_path.rename(new_path)
                         print(f"Added missing extension {ext}: {file_path.name} -> {new_path.name}")
 
+    def _file_exists_nocase(self, directory: Path, filename: str) -> bool:
+        filename_lower = filename.lower()
+        if not directory.exists():
+            return False
+        for f in directory.iterdir():
+            if f.name.lower() == filename_lower:
+                return True
+        return False
+
     def is_ignored_volume(self, file_path: Path) -> bool:
-        name = file_path.name.lower()
+        original_name = file_path.name
+        name = original_name.lower()
         
         # Ignored: part2~part99, part02~part99 (but NOT part1 or part01)
         part_match = re.search(r'\.part(\d+)\.rar$', name)
         if part_match:
             vol_num = int(part_match.group(1))
             if vol_num > 1:
+                part1_name = re.sub(r'(?i)\.part\d+\.rar$', '.part1.rar', original_name)
+                part01_name = re.sub(r'(?i)\.part\d+\.rar$', '.part01.rar', original_name)
+                if self._file_exists_nocase(file_path.parent, part1_name) or self._file_exists_nocase(file_path.parent, part01_name):
+                    return True
+                
+                if self.get_archive_type_from_magic(file_path):
+                    return False
                 return True
                 
         # Ignored: .002~.999 (but NOT .001)
@@ -65,6 +82,12 @@ class AutoExtractor:
         if num_match:
             vol_num = int(num_match.group(1))
             if vol_num > 1:
+                first_vol_name = re.sub(r'(?i)\.\d{3}$', '.001', original_name)
+                if self._file_exists_nocase(file_path.parent, first_vol_name):
+                    return True
+                
+                if self.get_archive_type_from_magic(file_path):
+                    return False
                 return True
                 
         # Ignored: zip splits .z01, .z02
@@ -72,6 +95,12 @@ class AutoExtractor:
         if z_match:
             vol_num = int(z_match.group(1))
             if vol_num > 0:
+                zip_name = re.sub(r'(?i)\.z\d{2,}$', '.zip', original_name)
+                if self._file_exists_nocase(file_path.parent, zip_name):
+                    return True
+                
+                if self.get_archive_type_from_magic(file_path):
+                    return False
                 return True
                 
         return False
@@ -120,6 +149,45 @@ class AutoExtractor:
             count += len(files)
         return count
 
+    def _get_dir_size(self, dir_path: Path) -> int:
+        total_size = 0
+        if not dir_path.exists():
+            return 0
+        for file_path in dir_path.rglob('*'):
+            if file_path.is_file():
+                total_size += file_path.stat().st_size
+        return total_size
+
+    def _get_total_archive_size(self, archive: Path) -> int:
+        total_size = 0
+        try:
+            stem = archive.stem
+            part_match = re.search(r'(.*)\.part0*1$', stem, re.I)
+            if part_match and archive.suffix.lower() == '.rar':
+                base_name = part_match.group(1)
+                for f in archive.parent.glob(f"{base_name}.part*.rar"):
+                    total_size += f.stat().st_size
+                return total_size
+                
+            if archive.suffix == '.001':
+                for f in archive.parent.glob(f"{stem}.*"):
+                    if re.match(r'^\.\d{3}$', f.suffix):
+                        total_size += f.stat().st_size
+                return total_size
+                
+            if archive.suffix.lower() == '.zip':
+                total_size += archive.stat().st_size
+                for f in archive.parent.glob(f"{stem}.z*"):
+                    if re.match(r'^\.z\d{2,}$', f.suffix, re.I):
+                        total_size += f.stat().st_size
+                return total_size
+                
+            if archive.exists():
+                return archive.stat().st_size
+        except Exception:
+            pass
+        return total_size
+
     def get_top_level_archives(self, target_dir: Path) -> list:
         # No longer used
         pass
@@ -158,12 +226,27 @@ class AutoExtractor:
             result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL)
             
             if result.returncode in [0, 1]:
-                print(f"Successfully extracted {archive_path.name}")
-                if result.returncode == 1:
-                    print(f"Extraction warning: {result.stdout}")
-                return True
+                extracted_size = self._get_dir_size(dest_dir)
+                archive_size = self._get_total_archive_size(archive_path)
+                
+                if extracted_size >= archive_size * 0.5:
+                    print(f"Successfully extracted {archive_path.name} (Extracted: {extracted_size} bytes, Archive: {archive_size} bytes)")
+                    if result.returncode == 1:
+                        print(f"Extraction warning: {result.stdout}")
+                    return True
+                else:
+                    print(f"Extraction validation failed for {archive_path.name}: Extracted size ({extracted_size} bytes) is less than 50% of archive size ({archive_size} bytes).")
+                    try:
+                        shutil.rmtree(dest_dir)
+                    except Exception:
+                        pass
         
         print(f"Failed to extract {archive_path.name} with all passwords.")
+        try:
+            if dest_dir.exists():
+                shutil.rmtree(dest_dir)
+        except Exception:
+            pass
         if 'result' in locals():
             print(f"Last extraction output:\n{result.stdout}\n{result.stderr}")
         return False
