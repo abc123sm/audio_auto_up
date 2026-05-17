@@ -834,6 +834,46 @@ class SouthPlusCrawler:
         
         print(f"Successfully processed {info['rj_code']} (Baidu)")
 
+    def _reorder_duplicates(self, file_path):
+        if not file_path.exists():
+            return
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        if not lines:
+            return
+            
+        rj_dict = {}
+        for line in lines:
+            if not line.strip():
+                continue
+            parts = line.split('\t')
+            # 以第一列作为RJ号
+            rj_code = parts[0].strip().upper()
+            if rj_code not in rj_dict:
+                rj_dict[rj_code] = []
+            rj_dict[rj_code].append(line)
+            
+        duplicates = []
+        singles = []
+        
+        for rj_code, line_list in rj_dict.items():
+            if len(line_list) > 1:
+                duplicates.extend(line_list)
+            else:
+                singles.extend(line_list)
+                
+        # 写回文件，重复的放在最前面
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(duplicates)
+            f.writelines(singles)
+
+    def reorder_all_duplicates(self):
+        print("检查并重排重复的资源...")
+        self._reorder_duplicates(self.dl_list_file)
+        self._reorder_duplicates(self.mega_file)
+
     def run(self, start_page=1, num_pages=1):
         for page in range(start_page, start_page + num_pages):
             threads = self.get_thread_list(page)
@@ -900,6 +940,9 @@ class SouthPlusCrawler:
                     self.handle_baidu_content(final_content, thread, rj_code)
                 
                 time.sleep(2)
+
+        # 所有抓取结束后，重新排序文件
+        self.reorder_all_duplicates()
 
 if __name__ == "__main__":
     crawler = SouthPlusCrawler()
